@@ -1,0 +1,80 @@
+[app]
+name="system.communication.service.com"
+port="17081"
+model=""
+
+[redis]
+is-start=true
+#host=       "192.168.11.63:6379"
+host=       "127.0.0.1:6380"
+password=   ""
+db=         7
+prefix="system_communication_server:"
+
+[tcp]
+port="17080"
+initEncryptionKey="b43dfb940ee7d3cb193c7e9350e3628c"
+
+[productCentre]
+domain="http://product-centre.net"
+sign="5kLb0gac"
+type="product"
+name="产品中心"
+
+[productCentreApi]
+assessmentPush="/api/assessment/push"
+renewAssessmentPush="/api/renew-assessment/push"
+qrcode="/api/wechat/qr-code"
+pushServiceInfo="/api/assessment/push-service-info"
+customerMobile="/api/wechat/user-mobile"
+bankList="/api/assessment-vip/bank-list"
+assessmentVipPush="/api/assessment-vip/push"
+renewAssessmentVipPush="/api/renew-assessment-vip/push"
+syncOnlineUser="/api/online/sync-online-user"
+transferServiceUser="/api/online/transfer-service-user"
+offlineOrderSyncRefund="/api/assessment/offline-order-sync-refund"
+userOnlineOrderPush="/api/user-online-order/push"
+openProductAuth="/api/product-auth/open"
+failProductAuth="/api/product-auth/fail"
+getOnlineOrderList="/api/assessment-online/assessment-online"
+getGiftListData="/api/gift-confirm/gift-list-to-service"
+getUserAssessmentInfo="/api/wechat/user-assessment-info"
+syncSignTime="/api/assessment/sync-sign-time"
+updateOrder="/api/wechat/update-assessment-crm"
+getBillingInformationList="/api/sync-order/query"
+getBillingInformationInfo="/api/wechat-service/query-open-api-order"
+getSyncOrderList="/api/sync-order/get-sync-order-list"
+updateSyncOrders="/api/sync-order/update-sync-orders"
+
+[vip]
+domain="http://vip.net"
+type="vip"
+name="vip操盘"
+
+[vipApi]
+assessmentPush="/api-assessment"
+renewAssessmentPush="/api-renew-assessment"
+qrcode="/qrcode"
+customerMobile="/api/customer-mobile"
+
+[vipUserType]
+# vip操盘用户类型值
+gz=2
+cs=1
+hy=5
+
+[area]
+# 通信对象的key
+gz="hj-gz"
+cs="hj-cs"
+hy="hj-hy"
+kcs="kf-cs"
+
+[mongodb]
+user=""
+pass=""
+host="192.168.11.63:27017"
+db="user_portrait"
+
+[checkIp]
+"222.240.152.82" = ""
