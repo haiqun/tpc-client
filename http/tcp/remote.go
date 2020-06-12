@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 	"tcp_client/providers"
@@ -16,10 +17,12 @@ import (
 
 const (
 	cMaxRetryCount = 20
+	cMaxConnetCount = 20
 )
 
+var cCurrentNumber = 1
+
 type Remote struct {
-	Index int
 	retryCount int8 // 重连次数
 	//comms []*communication.Communication
 	Comms map[int]*Communication
@@ -41,22 +44,49 @@ type Communication struct {
 /**
  * 初始化
  */
-func (r *Remote) ClientRun(ctx context.Context,index int) {
-	for r.retryCount < cMaxRetryCount {
-		r.retryCount ++
-		err := r.createConn1(index)
-		if err == nil {
-			r.retryCount = 0
-			break
+func ClientRun(ctx context.Context) {
+	// 设置初始tcp-client 创建的链接数
+	providers.Logger.Info("开始创建tcp的client链接")
+	r := Remote{
+
+	}
+	cannelTag := 0
+	go func() {
+		for  {
+			select {
+			case <-ctx.Done():
+				cannelTag = 1
+			default:
+				
+			}
 		}
-		providers.Logger.Errorf("创建第[%d]次连接失败:%s", r.retryCount, err.Error())
-		time.Sleep(1 * time.Second)
+	}()
+	
+	for cCurrentNumber <= cMaxConnetCount {
+		// 直接退出这个类
+		if cannelTag == 1 {
+			return
+		}
+		// 判断是否超过重试次数
+		retryCount :=0
+		providers.Logger.Info("创建服务器连接"+strconv.Itoa(retryCount))
+		for retryCount < cMaxRetryCount {
+			retryCount ++
+			err := r.createConn(cCurrentNumber)
+			if err == nil {
+				retryCount = 0
+				break
+			}
+			providers.Logger.Errorf("创建第[%d]次连接失败:%s", retryCount, err.Error())
+			time.Sleep(1 * time.Second)
+		}
+		// 第一次链接并且失败了，就panic
+		if retryCount >= cMaxRetryCount && cCurrentNumber == 1{
+			panic("远程服务器无法建立连接")
+		}
+		cCurrentNumber++
 	}
 
-	if r.retryCount >= cMaxRetryCount {
-		panic("远程服务器无法建立连接")
-	}
-	providers.Logger.Info("成功创建服务器连接")
 }
 
 
@@ -64,25 +94,31 @@ func (r *Remote) ClientRun(ctx context.Context,index int) {
  * 创建连接
  */
 
-func (r *Remote) createConn1(index int) error {
+func (r *Remote)createConn(index int) error {
 	fileCrt := filepath.Join(providers.RootPath, "config") + "/ca.crt";
+	providers.Logger.Info("证书路径:"+fileCrt)
 	rootPEM := lib.Read3(fileCrt)
 	if len(rootPEM) == 0 {
 		providers.Logger.Errorf("证书读取有误 %s", rootPEM)
 		return errors.New("证书读取有误")
 	}
+	providers.Logger.Info("证书路径1")
 	roots := x509.NewCertPool()
 	ok := roots.AppendCertsFromPEM([]byte(rootPEM))
 	if !ok {
 		panic("failed to parse root certificate")
 	}
+	providers.Logger.Info("证书路径2")
 	conn, err := tls.Dial("tcp", "127.0.0.1:"+ providers.Config.GetString("tcp.port"), &tls.Config{
 		RootCAs: roots,
 	})
+	providers.Logger.Info("证书路径3")
 	if err != nil {
 		panic("failed to connect: " + err.Error())
 	}
+	providers.Logger.Info("证书路径4")
 	r.Comms[index].Conn = conn
+	providers.Logger.Infof("发起链接成功 %s", r.Comms)
 	return nil
 	//defer conn.Close()
 }

@@ -18,10 +18,11 @@ var Logger seelog.LoggerInterface
 var OnceL sync.Once
 
 // 初始化函数
-func GetLogger() {
+func GetLogger() seelog.LoggerInterface{
 	OnceL.Do(func() {
-		loggerInit()
+		Logger = loggerInit()
 	})
+	return Logger
 }
 
 func loggerInit() seelog.LoggerInterface {

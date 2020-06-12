@@ -13,10 +13,11 @@ var RootPath string
 var OnecR sync.Once
 
 // 初始化函数
-func GetRootPath() {
+func GetRootPath() string {
 	OnecR.Do(func() {
 		RootPath = rootPath()
 	})
+	return  RootPath
 }
 
 /**

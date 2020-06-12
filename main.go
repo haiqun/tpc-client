@@ -2,27 +2,32 @@ package main
 
 import (
 	"context"
-	"github.com/gin-gonic/gin"
 	"tcp_client/http/tcp"
 	"tcp_client/providers"
 	"tcp_client/routers"
+	"github.com/gin-gonic/gin"
 )
 
-var CtxCannel context.CancelFunc
+
+
+var ctxCannel context.CancelFunc
 
 func init()  {
-	// 初始化变量
-	providers.GetRootPath()
-	providers.GetLogger()
+	// 初始化配置
 	providers.GetConfig()
-	// 启动tcp - client
-	var tcpCom tcp.Remote
+	// 初始化日志工具
+	providers.GetLogger()
+	// 初始化网站根目录
+	providers.GetRootPath()
+	// 启动tcp-server的监听
 	var ctx context.Context
-	ctx,CtxCannel = context.WithCancel(context.Background())
-	go tcpCom.ClientRun(ctx,2)
+	ctx , ctxCannel = context.WithCancel(context.Background())
+	go tcp.ClientRun(ctx)
 }
 
 func main()  {
+	providers.Logger.Info("tcp_clinet_starting....")
+	// 获取链接，发送数据和打印接受的数据
 	app := providers.Config.GetStringMapString("app")
 	// 设置对应的模式
 	if app["model"] == "release" {
@@ -43,6 +48,6 @@ func main()  {
 	} else {
 		r.Run(":8080")
 	}
-
-	defer CtxCannel()
+	ctxCannel();
+	providers.Logger.Info("tcp_clinet_end....")
 }
