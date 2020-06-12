@@ -1,6 +1,6 @@
 [app]
-name="system.communication.service.com"
-port="17081"
+name="system.communication.client.com"
+port="17082"
 model=""
 
 [redis]

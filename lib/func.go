@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"fmt"
 	"io/ioutil"
-	"tcp-tls-project/providers"
 	"time"
 	"math/rand"
 	"crypto/md5"
@@ -15,6 +14,7 @@ import (
 	"reflect"
 	"strconv"
 	"errors"
+	"tcp_client/providers"
 )
 
 var areaParamError = errors.New("区域参数不正确")

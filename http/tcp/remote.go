@@ -1,155 +1,88 @@
 package tcp
 
 import (
-	"crypto/rand"
+	"context"
 	"crypto/tls"
-	"net"
+	"crypto/x509"
+	"errors"
+	"log"
 	"path/filepath"
-	"tcp-tls-project/lib"
-	"tcp-tls-project/providers"
+	"sync"
 	"time"
+	"tcp_client/providers"
+	"tcp_client/lib"
 )
 
-/**
- * 启动tcp - 监听服务
- */
-func (t *TcpCommunication)ServerRun()  {
-	// 将连接保存起来
-	path := filepath.Join(providers.RootPath, "config")
-	crt, err := tls.LoadX509KeyPair(path+"/ca.crt", path+"/ca.key")
-	if err != nil {
-		panic("证书认证有误！err ：%s" + err.Error())
-	}
-	tlsConfig := &tls.Config{}
-	tlsConfig.Certificates = []tls.Certificate{crt}
-	tlsConfig.Time = time.Now
-	tlsConfig.Rand = rand.Reader
-	l, err := tls.Listen("tcp", "127.0.0.1:"+ providers.Config.GetString("tcp.port"), tlsConfig)
 
-	if err != nil {
-		panic("监听失败,原因:" + err.Error())
-	}
-	providers.Logger.Info("服务启动成功!开始监听:" + providers.Config.GetString("tcp.port"))
-	// 心跳监测 todo
+const (
+	cMaxRetryCount = 20
+)
 
-	for {
-		conn, err := l.Accept()// 这个是连接过来的tcp连接
-		if err != nil {
-			providers.Logger.Errorf("接收失败，失败原因:%s", err.Error())
-			continue
-		}
-		// ip 监测 todo
-		providers.Logger.Infof("有新链接进入:%+v", conn.RemoteAddr().String())
-		go t.createCommunication(conn) // 将连接保存起来
-	}
-	providers.Logger.Info("监听关闭")
-	// 监听关闭
-	l.Close()
-}
-
-// 同一个tcp内部的，通讯携程的概念
-type TcpAisle struct {
-	Send chan string
-	Accept chan string
-}
-
-// 一个tcp连接的实例
-type TcpConnect struct {
-	Conn net.Conn // 当前通讯连接
-	Occupancy int // 当前tcp被多个业务端使用
-	TcpAisle map[string]TcpAisle
-}
-
-// 一个tpc连接池
-type TcpCommunication struct {
-	ConnPool map[int]TcpConnect
-}
-
-func (tc *TcpConnect)TcpSendMsg(msg string) bool {
-	//发送给客户端
-	_, err := tc.Conn.Write([]byte(msg))
-	if err != nil {
-		providers.Logger.Errorf("TcpSendMsg failed: %s",err.Error())
-		return false
-	}
-	return true
-}
-
-
-//var TC TcpCommunication // tcp的连接池
-var currentConn = 1  // 初始化 - 当前的连接数
-
-func GetTcpCommunication(i int) *TcpCommunication {
-	tc := TcpCommunication{
-		ConnPool: make(map[int]TcpConnect,i),
-	}
-	return &tc
+type Remote struct {
+	Index int
+	retryCount int8 // 重连次数
+	//comms []*communication.Communication
+	Comms map[int]*Communication
+	mus []sync.Mutex
 }
 
 /**
- * 保存tcp的连接
+ * 通信
  */
-func (t *TcpCommunication)createCommunication(conn net.Conn) {
-	providers.Logger.Infof("createCommunication:%+v", conn.RemoteAddr().String())
-	tcpC := TcpConnect{
-		Conn: conn,
-		TcpAisle: make(map[string]TcpAisle,100), // todo 默认每个tcp能给100个服务端调用
-	}
-	t.ConnPool[currentConn] = tcpC
-	currentConn ++
+type Communication struct {
+	id int // 唯一 id ，客户端可用
+	//cas // 添加 id 的原子操作
+	Conn *tls.Conn
+	logger *log.Logger
+	callbackChannel sync.Map//map[uint64]chan string, 保证并发写安全 // 回调通道
+	heartbeat time.Time //心跳时间
 }
 
-func (t *TcpCommunication)GetTcpConn() (tcp *TcpConnect,ids string){
-	if currentConn == 1 {
-		return nil,""
-	}
-	n := lib.GetRandNum(currentConn)
-	providers.Logger.Infof("GetTcpConn 获取链接n:%d",n)
-	tcpC ,ok := t.ConnPool[n]
-	if !ok {
-		return nil,""
-	}
-
-	ids = string(lib.Krand(10,1000))
-	tcpC.TcpAisle[ids] = TcpAisle{
-		Send: make(chan string,100),
-		Accept: make(chan string,100),
-	}
-	// 监听被调用的tcp通道
-	go sendChannel(&tcpC,ids)
-	go acceptanceChannel(&tcpC,ids)
-	return &tcpC,ids
-}
-
-
-// 监听发送给tcp-client的channel，有信息马上发送
-func sendChannel(tcp *TcpConnect,ids string) {
-	conn := tcp.Conn
-	//buffer := make([]byte, 1024)
-	for {
-		select {
-			case sendData := <-tcp.TcpAisle[ids].Send:
-				//发送给客户端
-				_, err := conn.Write([]byte(sendData))
-				if err != nil {
-					providers.Logger.Info("Tcp sendData : %s ",err.Error())
-				}
-		}
-	}
-}
-
-// 监听tcp-client发送过来的信息，马上发送响应给 tcp.TcpAisle[ids].Accept
-func acceptanceChannel(tcp *TcpConnect,ids string)  {
-	buffer := make([]byte, 1024)
-	conn := tcp.Conn
-	for {
-		len, err := conn.Read(buffer)
-		if err != nil {
-			providers.Logger.Info("acceptanceChannel : %s ",err.Error())
+/**
+ * 初始化
+ */
+func (r *Remote) ClientRun(ctx context.Context,index int) {
+	for r.retryCount < cMaxRetryCount {
+		r.retryCount ++
+		err := r.createConn1(index)
+		if err == nil {
+			r.retryCount = 0
 			break
 		}
-		tcp.TcpAisle[ids].Accept <- string(buffer[:len])
+		providers.Logger.Errorf("创建第[%d]次连接失败:%s", r.retryCount, err.Error())
+		time.Sleep(1 * time.Second)
 	}
+
+	if r.retryCount >= cMaxRetryCount {
+		panic("远程服务器无法建立连接")
+	}
+	providers.Logger.Info("成功创建服务器连接")
 }
 
 
+/**
+ * 创建连接
+ */
+
+func (r *Remote) createConn1(index int) error {
+	fileCrt := filepath.Join(providers.RootPath, "config") + "/ca.crt";
+	rootPEM := lib.Read3(fileCrt)
+	if len(rootPEM) == 0 {
+		providers.Logger.Errorf("证书读取有误 %s", rootPEM)
+		return errors.New("证书读取有误")
+	}
+	roots := x509.NewCertPool()
+	ok := roots.AppendCertsFromPEM([]byte(rootPEM))
+	if !ok {
+		panic("failed to parse root certificate")
+	}
+	conn, err := tls.Dial("tcp", "127.0.0.1:"+ providers.Config.GetString("tcp.port"), &tls.Config{
+		RootCAs: roots,
+	})
+	if err != nil {
+		panic("failed to connect: " + err.Error())
+	}
+	r.Comms[index].Conn = conn
+	return nil
+	//defer conn.Close()
+}

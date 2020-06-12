@@ -2,8 +2,8 @@ package routers
 
 import (
 	"github.com/gin-gonic/gin"
-	"tcp-tls-project/http/controllers"
-	"tcp-tls-project/http/middles"
+	"tcp_client/http/controllers"
+	"tcp_client/http/middles"
 )
 
 func NewApis(api *gin.RouterGroup) {

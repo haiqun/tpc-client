@@ -1,18 +1,25 @@
 package main
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
-	"tcp-tls-project/providers"
-	"tcp-tls-project/routers"
+	"tcp_client/http/tcp"
+	"tcp_client/providers"
+	"tcp_client/routers"
 )
+
+var CtxCannel context.CancelFunc
 
 func init()  {
 	// 初始化变量
 	providers.GetRootPath()
 	providers.GetLogger()
 	providers.GetConfig()
-	// 启动tcp
-
+	// 启动tcp - client
+	var tcpCom tcp.Remote
+	var ctx context.Context
+	ctx,CtxCannel = context.WithCancel(context.Background())
+	go tcpCom.ClientRun(ctx,2)
 }
 
 func main()  {
@@ -36,4 +43,6 @@ func main()  {
 	} else {
 		r.Run(":8080")
 	}
+
+	defer CtxCannel()
 }
